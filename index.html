@@ -1,9 +1,12 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Multi-Unit Range² Visualizer</title>
+    <link rel="icon" href="https://cdn.jsdelivr.net/npm/tabler-icons@1.61.1/icons/brand-tabler.svg"
+        type="image/svg+xml">
+    <title>Range² Visualizer</title>
     <style>
         :root {
             --gap: 12px;
@@ -194,7 +197,7 @@
                 flex-direction: column;
                 gap: 16px;
             }
-            
+
             .side-panel {
                 width: 100%;
                 position: static;
@@ -202,22 +205,23 @@
         }
     </style>
 </head>
+
 <body>
     <div class="main-panel">
-        <h1>Multi-Unit Range² Visualizer</h1>
-        
+        <h1>Range² Visualizer</h1>
+
         <div class="global-controls">
             <label>
-                Grid size: 
+                Grid size:
                 <input id="gridSize" type="number" min="5" max="51" step="2" value="31" />
             </label>
             <button class="clear-btn" id="clearAll">Clear All Units</button>
         </div>
-        
+
         <div id="canvasWrap">
             <canvas id="c" width="600" height="600"></canvas>
         </div>
-        
+
         <div class="meta">
             <div id="hoverInfo">Hover over cells to see coordinates and distances</div>
         </div>
@@ -225,7 +229,7 @@
 
     <div class="side-panel">
         <h2>Units Control Panel</h2>
-        
+
         <div class="instructions">
             <strong>Click</strong> anywhere to spawn new units<br>
             <strong>Drag</strong> existing units to move them<br>
@@ -275,13 +279,13 @@
                     units = state.units || [];
                     selectedUnitId = state.selectedUnitId || null;
                     nextUnitId = state.nextUnitId || 1;
-                    
+
                     // Restore grid size if saved
                     if (state.grid) {
                         gridInput.value = state.grid;
                         grid = state.grid;
                     }
-                    
+
                     return true;
                 }
             } catch (error) {
@@ -361,7 +365,7 @@
         function draw() {
             if (drawPending) return;
             drawPending = true;
-            
+
             requestAnimationFrame(() => {
                 drawPending = false;
                 performDraw();
@@ -370,14 +374,14 @@
 
         function performDraw() {
             grid = parseInt(gridInput.value);
-            
+
             // Ensure grid is odd
             if (grid % 2 === 0) {
                 grid = parseInt(gridInput.value = parseInt(gridInput.value) + 1);
             }
-            
+
             cell = Math.floor(sizePx / grid);
-            
+
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -386,9 +390,9 @@
                 for (let x = 0; x < grid; x++) {
                     ctx.fillStyle = 'rgba(240, 240, 240, 0.3)';
                     ctx.fillRect(
-                        x * cell + 1, 
-                        y * cell + 1, 
-                        cell - 2, 
+                        x * cell + 1,
+                        y * cell + 1,
+                        cell - 2,
                         cell - 2
                     );
                 }
@@ -401,18 +405,18 @@
                         const dx = x - unit.x;
                         const dy = y - unit.y;
                         const dsq = dx * dx + dy * dy;
-                        
+
                         if (dsq <= unit.range2) {
                             // Convert hex color to rgba
                             const r = parseInt(unit.color.slice(1, 3), 16);
                             const g = parseInt(unit.color.slice(3, 5), 16);
                             const b = parseInt(unit.color.slice(5, 7), 16);
                             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
-                            
+
                             ctx.fillRect(
-                                x * cell + 1, 
-                                y * cell + 1, 
-                                cell - 2, 
+                                x * cell + 1,
+                                y * cell + 1,
+                                cell - 2,
                                 cell - 2
                             );
                         }
@@ -425,10 +429,10 @@
                 ctx.lineWidth = 1;
                 const radius = Math.sqrt(unit.range2) * cell;
                 ctx.arc(
-                    (unit.x + 0.5) * cell, 
-                    (unit.y + 0.5) * cell, 
-                    radius, 
-                    0, 
+                    (unit.x + 0.5) * cell,
+                    (unit.y + 0.5) * cell,
+                    radius,
+                    0,
                     Math.PI * 2
                 );
                 ctx.stroke();
@@ -437,29 +441,29 @@
             // Draw units
             units.forEach(unit => {
                 ctx.fillStyle = unit.color;
-                
+
                 // Add selection indicator
                 if (unit.id === selectedUnitId) {
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 3;
                     ctx.strokeRect(
-                        unit.x * cell - 1, 
-                        unit.y * cell - 1, 
-                        cell + 2, 
+                        unit.x * cell - 1,
+                        unit.y * cell - 1,
+                        cell + 2,
                         cell + 2
                     );
                 }
-                
+
                 ctx.fillRect(
-                    unit.x * cell + 2, 
-                    unit.y * cell + 2, 
-                    cell - 4, 
+                    unit.x * cell + 2,
+                    unit.y * cell + 2,
+                    cell - 4,
                     cell - 4
                 );
 
                 // Draw unit ID
                 ctx.fillStyle = '#fff';
-                ctx.font = `${Math.max(10, cell/3)}px Arial`;
+                ctx.font = `${Math.max(10, cell / 3)}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.fillText(
                     unit.id.toString(),
@@ -542,7 +546,7 @@
             const unit = units.find(u => u.id === id);
             if (unit) {
                 unit.range2 = parseInt(value);
-                
+
                 // Only update the specific slider value display during live updates
                 if (isLive) {
                     const slider = document.querySelector(`input[data-unit-id="${id}"]`);
@@ -570,36 +574,36 @@
             // Add keyboard event listeners when slider is focused
             const slider = event.target;
             const unitId = parseInt(slider.dataset.unitId);
-            
+
             const handleKeyDown = (e) => {
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                     e.stopPropagation(); // Prevent canvas from receiving these events
-                    
+
                     // Handle the key press manually to maintain focus
                     let currentValue = parseInt(slider.value);
                     const step = 1;
-                    
+
                     if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
                         currentValue = Math.max(0, currentValue - step);
                     } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
                         currentValue = Math.min(200, currentValue + step);
                     }
-                    
+
                     slider.value = currentValue;
                     updateUnitRange(unitId, currentValue, true); // Use live update to avoid UI rebuild
                     e.preventDefault(); // Prevent default slider behavior that might cause focus loss
                 }
             };
-            
+
             const handleBlur = () => {
                 // Do a final full update when slider loses focus
                 const finalValue = parseInt(slider.value);
                 updateUnitRange(unitId, finalValue, false);
-                
+
                 slider.removeEventListener('keydown', handleKeyDown);
                 slider.removeEventListener('blur', handleBlur);
             };
-            
+
             slider.addEventListener('keydown', handleKeyDown);
             slider.addEventListener('blur', handleBlur);
         }
@@ -630,45 +634,45 @@
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / cell);
             const y = Math.floor((e.clientY - rect.top) / cell);
-            
+
             if (x >= 0 && x < grid && y >= 0 && y < grid) {
                 const existingUnit = getUnitAt(x, y);
-                
+
                 if (existingUnit) {
                     // Start potential drag on existing unit
                     isDragging = false;
                     dragStartTime = Date.now();
                     selectUnit(existingUnit.id);
-                    
+
                     const onMouseMove = (moveEvent) => {
                         if (!isDragging && Date.now() - dragStartTime > 100) {
                             isDragging = true;
                             canvas.style.cursor = 'grabbing';
                         }
-                        
+
                         if (isDragging) {
                             const moveRect = canvas.getBoundingClientRect();
                             const newX = Math.floor((moveEvent.clientX - moveRect.left) / cell);
                             const newY = Math.floor((moveEvent.clientY - moveRect.top) / cell);
-                            
+
                             if (newX >= 0 && newX < grid && newY >= 0 && newY < grid) {
                                 moveSelectedUnit(newX, newY);
                             }
                         }
                     };
-                    
+
                     const onMouseUp = () => {
                         if (!isDragging) {
                             // This was a click, not a drag - create new unit at same position
                             createUnit(x, y);
                         }
-                        
+
                         isDragging = false;
                         canvas.style.cursor = 'crosshair';
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
                     };
-                    
+
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
                 } else {
@@ -683,7 +687,7 @@
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / cell);
             const y = Math.floor((e.clientY - rect.top) / cell);
-            
+
             if (x >= 0 && x < grid && y >= 0 && y < grid) {
                 const unit = getUnitAt(x, y);
                 if (unit) {
@@ -692,9 +696,9 @@
                     const distances = units.map(u => {
                         const dx = x - u.x;
                         const dy = y - u.y;
-                        return `Unit ${u.id}: ${dx*dx + dy*dy}`;
+                        return `Unit ${u.id}: ${dx * dx + dy * dy}`;
                     }).join(', ');
-                    
+
                     hoverInfo.textContent = `(${x}, ${y})${units.length > 0 ? ' | Distances² - ' + distances : ''}`;
                 }
             } else {
@@ -721,11 +725,12 @@
         const hasLoadedState = loadState();
         fixDPI();
         updateUI();
-        
+
         // If we loaded state, make sure the display is updated
         if (hasLoadedState) {
             draw();
         }
     </script>
 </body>
+
 </html>
