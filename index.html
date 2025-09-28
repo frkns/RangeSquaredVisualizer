@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Multi-Unit Range² Visualizer</title>
+    <style>
+        :root {
+            --gap: 12px;
+        }
+
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial;
+            display: flex;
+            gap: 24px;
+            padding: 18px;
+            background: #fafafa;
+            color: #111;
+            min-height: 100vh;
+        }
+
+        .main-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .side-panel {
+            width: 320px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            height: fit-content;
+            position: sticky;
+            top: 18px;
+        }
+
+        h1 {
+            margin: 6px 0 12px;
+            font-size: 20px;
+        }
+
+        h2 {
+            margin: 0 0 16px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .global-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--gap);
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        input[type=number] {
+            width: 72px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .clear-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #dc3545;
+            background: #dc3545;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .clear-btn:hover {
+            background: #c82333;
+        }
+
+        #canvasWrap {
+            box-shadow: 0 6px 18px rgba(20, 20, 40, 0.06);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        canvas {
+            display: block;
+            background: white;
+            image-rendering: pixelated;
+            cursor: grab;
+        }
+
+        .meta {
+            font-size: 13px;
+            color: #666;
+            text-align: center;
+        }
+
+        .units-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .unit-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-left: 4px solid;
+        }
+
+        .unit-item.selected {
+            background: #e3f2fd;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .unit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .unit-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .unit-pos {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .delete-unit {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .delete-unit:hover {
+            background: #c82333;
+        }
+
+        .unit-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .range-slider {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .range-value {
+            font-weight: 600;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .unit-stats {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .instructions {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .instructions strong {
+            color: #0c5460;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+                gap: 16px;
+            }
+            
+            .side-panel {
+                width: 100%;
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-panel">
+        <h1>Multi-Unit Range² Visualizer</h1>
+        
+        <div class="global-controls">
+            <label>
+                Grid size: 
+                <input id="gridSize" type="number" min="5" max="51" step="2" value="31" />
+            </label>
+            <button class="clear-btn" id="clearAll">Clear All Units</button>
+        </div>
+        
+        <div id="canvasWrap">
+            <canvas id="c" width="600" height="600"></canvas>
+        </div>
+        
+        <div class="meta">
+            <div id="hoverInfo">Hover over cells to see coordinates and distances</div>
+        </div>
+    </div>
+
+    <div class="side-panel">
+        <h2>Units Control Panel</h2>
+        
+        <div class="instructions">
+            <strong>Click</strong> anywhere to spawn new units<br>
+            <strong>Drag</strong> existing units to move them<br>
+            <strong>Adjust</strong> sliders to change each unit's range
+        </div>
+
+        <div class="units-list" id="unitsList">
+            <div style="text-align: center; color: #999; padding: 20px;">
+                No units spawned yet.<br>
+                Click on the grid to create your first unit!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const gridInput = document.getElementById('gridSize');
+        const hoverInfo = document.getElementById('hoverInfo');
+        const unitsList = document.getElementById('unitsList');
+        const clearAllBtn = document.getElementById('clearAll');
+
+        let grid = parseInt(gridInput.value);
+        const sizePx = Math.min(canvas.width, canvas.height);
+        let cell = Math.floor(sizePx / grid);
+        let units = [];
+        let selectedUnitId = null;
+        let nextUnitId = 1;
+
+        const unitColors = [
+            '#e74c3c', // Red
+            '#3498db', // Blue
+            '#2ecc71', // Green
+            '#f39c12', // Orange
+            '#9b59b6', // Purple
+            '#1abc9c', // Teal
+            '#e67e22', // Dark orange
+            '#34495e', // Dark blue-gray
+            '#c0392b', // Dark red
+            '#27ae60', // Dark green
+            '#8e44ad', // Dark purple
+            '#16a085'  // Dark teal
+        ];
+
+        function getUnitColor(index) {
+            return unitColors[index % unitColors.length];
+        }
+
+        function createUnit(x, y) {
+            const unit = {
+                id: nextUnitId++,
+                x: x,
+                y: y,
+                range2: 25,
+                color: getUnitColor(units.length)
+            };
+            units.push(unit);
+            selectedUnitId = unit.id;
+            updateUI();
+            draw();
+        }
+
+        function deleteUnit(id) {
+            units = units.filter(unit => unit.id !== id);
+            if (selectedUnitId === id) {
+                selectedUnitId = units.length > 0 ? units[0].id : null;
+            }
+            updateUI();
+            draw();
+        }
+
+        function selectUnit(id) {
+            selectedUnitId = id;
+            updateUI();
+        }
+
+        function moveSelectedUnit(x, y) {
+            if (selectedUnitId) {
+                const unit = units.find(u => u.id === selectedUnitId);
+                if (unit) {
+                    unit.x = x;
+                    unit.y = y;
+                    updateUI();
+                    draw();
+                }
+            }
+        }
+
+        function getUnitAt(x, y) {
+            return units.find(unit => unit.x === x && unit.y === y);
+        }
+
+        // Optimized draw function with requestAnimationFrame throttling
+        let drawPending = false;
+        function draw() {
+            if (drawPending) return;
+            drawPending = true;
+            
+            requestAnimationFrame(() => {
+                drawPending = false;
+                performDraw();
+            });
+        }
+
+        function performDraw() {
+            grid = parseInt(gridInput.value);
+            
+            // Ensure grid is odd
+            if (grid % 2 === 0) {
+                grid = parseInt(gridInput.value = parseInt(gridInput.value) + 1);
+            }
+            
+            cell = Math.floor(sizePx / grid);
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid background
+            for (let y = 0; y < grid; y++) {
+                for (let x = 0; x < grid; x++) {
+                    ctx.fillStyle = 'rgba(240, 240, 240, 0.3)';
+                    ctx.fillRect(
+                        x * cell + 1, 
+                        y * cell + 1, 
+                        cell - 2, 
+                        cell - 2
+                    );
+                }
+            }
+
+            // Draw range areas for each unit
+            units.forEach(unit => {
+                for (let y = 0; y < grid; y++) {
+                    for (let x = 0; x < grid; x++) {
+                        const dx = x - unit.x;
+                        const dy = y - unit.y;
+                        const dsq = dx * dx + dy * dy;
+                        
+                        if (dsq <= unit.range2) {
+                            // Convert hex color to rgba
+                            const r = parseInt(unit.color.slice(1, 3), 16);
+                            const g = parseInt(unit.color.slice(3, 5), 16);
+                            const b = parseInt(unit.color.slice(5, 7), 16);
+                            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+                            
+                            ctx.fillRect(
+                                x * cell + 1, 
+                                y * cell + 1, 
+                                cell - 2, 
+                                cell - 2
+                            );
+                        }
+                    }
+                }
+
+                // Draw range boundary circle
+                ctx.beginPath();
+                ctx.strokeStyle = unit.color + '40'; // Add transparency
+                ctx.lineWidth = 1;
+                const radius = Math.sqrt(unit.range2) * cell;
+                ctx.arc(
+                    (unit.x + 0.5) * cell, 
+                    (unit.y + 0.5) * cell, 
+                    radius, 
+                    0, 
+                    Math.PI * 2
+                );
+                ctx.stroke();
+            });
+
+            // Draw units
+            units.forEach(unit => {
+                ctx.fillStyle = unit.color;
+                
+                // Add selection indicator
+                if (unit.id === selectedUnitId) {
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(
+                        unit.x * cell - 1, 
+                        unit.y * cell - 1, 
+                        cell + 2, 
+                        cell + 2
+                    );
+                }
+                
+                ctx.fillRect(
+                    unit.x * cell + 2, 
+                    unit.y * cell + 2, 
+                    cell - 4, 
+                    cell - 4
+                );
+
+                // Draw unit ID
+                ctx.fillStyle = '#fff';
+                ctx.font = `${Math.max(10, cell/3)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    unit.id.toString(),
+                    (unit.x + 0.5) * cell,
+                    (unit.y + 0.65) * cell
+                );
+            });
+        }
+
+        function updateUI() {
+            if (units.length === 0) {
+                unitsList.innerHTML = `
+                    <div style="text-align: center; color: #999; padding: 20px;">
+                        No units spawned yet.<br>
+                        Click on the grid to create your first unit!
+                    </div>
+                `;
+                return;
+            }
+
+            // Store currently focused element before UI rebuild
+            const focusedElement = document.activeElement;
+            const focusedSliderId = focusedElement && focusedElement.id ? focusedElement.id : null;
+
+            unitsList.innerHTML = units.map(unit => {
+                const inRangeCount = calculateInRangeCells(unit);
+                return `
+                    <div class="unit-item ${unit.id === selectedUnitId ? 'selected' : ''}" 
+                         style="border-left-color: ${unit.color}">
+                        <div class="unit-header">
+                            <div>
+                                <div class="unit-name" style="color: ${unit.color}">Unit ${unit.id}</div>
+                                <div class="unit-pos">Position: (${unit.x}, ${unit.y})</div>
+                            </div>
+                            <button class="delete-unit" onclick="deleteUnit(${unit.id}); event.stopPropagation();">×</button>
+                        </div>
+                        <div class="unit-controls">
+                            <input type="range" class="range-slider" 
+                                   min="0" max="200" value="${unit.range2}"
+                                   data-unit-id="${unit.id}"
+                                   onchange="updateUnitRange(${unit.id}, this.value, false)"
+                                   oninput="updateUnitRange(${unit.id}, this.value, true)"
+                                   onmousedown="handleSliderMouseDown(event)"
+                                   onmouseup="event.stopPropagation()"
+                                   onfocus="handleSliderFocus(event)"
+                                   tabindex="0"
+                                   id="slider-${unit.id}">
+                            <div class="range-value">${unit.range2}</div>
+                        </div>
+                        <div class="unit-stats">
+                            Range²: ${unit.range2} | In-range cells: ${inRangeCount}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Restore focus to the same slider after UI rebuild
+            if (focusedSliderId) {
+                const restoredSlider = document.getElementById(focusedSliderId);
+                if (restoredSlider) {
+                    setTimeout(() => restoredSlider.focus(), 0);
+                }
+            }
+        }
+
+        function calculateInRangeCells(unit) {
+            let count = 0;
+            for (let y = 0; y < grid; y++) {
+                for (let x = 0; x < grid; x++) {
+                    const dx = x - unit.x;
+                    const dy = y - unit.y;
+                    const dsq = dx * dx + dy * dy;
+                    if (dsq <= unit.range2) count++;
+                }
+            }
+            return count;
+        }
+
+        function updateUnitRange(id, value, isLive = false) {
+            const unit = units.find(u => u.id === id);
+            if (unit) {
+                unit.range2 = parseInt(value);
+                
+                // Only update the specific slider value display during live updates
+                if (isLive) {
+                    const slider = document.querySelector(`input[data-unit-id="${id}"]`);
+                    if (slider) {
+                        const valueDisplay = slider.parentElement.querySelector('.range-value');
+                        if (valueDisplay) {
+                            valueDisplay.textContent = unit.range2;
+                        }
+                    }
+                    draw(); // Only redraw, don't rebuild entire UI
+                } else {
+                    updateUI(); // Full UI update on final change
+                    draw();
+                }
+            }
+        }
+
+        function handleSliderMouseDown(event) {
+            event.stopPropagation();
+            event.target.focus(); // Ensure slider gets focus for keyboard events
+        }
+
+        function handleSliderFocus(event) {
+            // Add keyboard event listeners when slider is focused
+            const slider = event.target;
+            const unitId = parseInt(slider.dataset.unitId);
+            
+            const handleKeyDown = (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.stopPropagation(); // Prevent canvas from receiving these events
+                    
+                    // Handle the key press manually to maintain focus
+                    let currentValue = parseInt(slider.value);
+                    const step = 1;
+                    
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                        currentValue = Math.max(0, currentValue - step);
+                    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                        currentValue = Math.min(200, currentValue + step);
+                    }
+                    
+                    slider.value = currentValue;
+                    updateUnitRange(unitId, currentValue, true); // Use live update to avoid UI rebuild
+                    e.preventDefault(); // Prevent default slider behavior that might cause focus loss
+                }
+            };
+            
+            const handleBlur = () => {
+                // Do a final full update when slider loses focus
+                const finalValue = parseInt(slider.value);
+                updateUnitRange(unitId, finalValue, false);
+                
+                slider.removeEventListener('keydown', handleKeyDown);
+                slider.removeEventListener('blur', handleBlur);
+            };
+            
+            slider.addEventListener('keydown', handleKeyDown);
+            slider.addEventListener('blur', handleBlur);
+        }
+
+        // Event handlers
+        gridInput.addEventListener('change', () => {
+            draw();
+            updateUI();
+        });
+
+        clearAllBtn.addEventListener('click', () => {
+            units = [];
+            selectedUnitId = null;
+            nextUnitId = 1;
+            updateUI();
+            draw();
+        });
+
+        let isDragging = false;
+        let dragStartTime = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / cell);
+            const y = Math.floor((e.clientY - rect.top) / cell);
+            
+            if (x >= 0 && x < grid && y >= 0 && y < grid) {
+                const existingUnit = getUnitAt(x, y);
+                
+                if (existingUnit) {
+                    // Start potential drag on existing unit
+                    isDragging = false;
+                    dragStartTime = Date.now();
+                    selectUnit(existingUnit.id);
+                    
+                    const onMouseMove = (moveEvent) => {
+                        if (!isDragging && Date.now() - dragStartTime > 100) {
+                            isDragging = true;
+                            canvas.style.cursor = 'grabbing';
+                        }
+                        
+                        if (isDragging) {
+                            const moveRect = canvas.getBoundingClientRect();
+                            const newX = Math.floor((moveEvent.clientX - moveRect.left) / cell);
+                            const newY = Math.floor((moveEvent.clientY - moveRect.top) / cell);
+                            
+                            if (newX >= 0 && newX < grid && newY >= 0 && newY < grid) {
+                                moveSelectedUnit(newX, newY);
+                            }
+                        }
+                    };
+                    
+                    const onMouseUp = () => {
+                        if (!isDragging) {
+                            // This was a click, not a drag - create new unit at same position
+                            createUnit(x, y);
+                        }
+                        
+                        isDragging = false;
+                        canvas.style.cursor = 'crosshair';
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                } else {
+                    // Empty cell - always create new unit
+                    createUnit(x, y);
+                }
+            }
+        });
+
+        // Hover information
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / cell);
+            const y = Math.floor((e.clientY - rect.top) / cell);
+            
+            if (x >= 0 && x < grid && y >= 0 && y < grid) {
+                const unit = getUnitAt(x, y);
+                if (unit) {
+                    hoverInfo.textContent = `Unit ${unit.id} at (${x}, ${y}) | Range²: ${unit.range2}`;
+                } else {
+                    const distances = units.map(u => {
+                        const dx = x - u.x;
+                        const dy = y - u.y;
+                        return `Unit ${u.id}: ${dx*dx + dy*dy}`;
+                    }).join(', ');
+                    
+                    hoverInfo.textContent = `(${x}, ${y})${units.length > 0 ? ' | Distances² - ' + distances : ''}`;
+                }
+            } else {
+                hoverInfo.textContent = 'Hover over cells to see coordinates and distances';
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            hoverInfo.textContent = 'Hover over cells to see coordinates and distances';
+        });
+
+        // Fix DPI for crisp rendering
+        function fixDPI() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = sizePx * dpr;
+            canvas.height = sizePx * dpr;
+            canvas.style.width = sizePx + 'px';
+            canvas.style.height = sizePx + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            draw();
+        }
+
+        // Initialize
+        fixDPI();
+        updateUI();
+    </script>
+</body>
+</html>
