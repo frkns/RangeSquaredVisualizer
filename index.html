@@ -20,6 +20,7 @@
             background: #fafafa;
             color: #111;
             min-height: 100vh;
+            margin: 0;
         }
 
         .main-panel {
@@ -27,6 +28,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-width: 0;
         }
 
         .side-panel {
@@ -38,6 +40,7 @@
             height: fit-content;
             position: sticky;
             top: 18px;
+            flex-shrink: 0;
         }
 
         h1 {
@@ -59,10 +62,17 @@
             margin-bottom: 12px;
         }
 
+        .grid-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
         label {
             display: flex;
             gap: 8px;
             align-items: center;
+            font-size: 14px;
         }
 
         input[type=number] {
@@ -91,6 +101,8 @@
             border-radius: 8px;
             overflow: hidden;
             margin-bottom: 12px;
+            max-width: 100%;
+            max-height: 70vh;
         }
 
         canvas {
@@ -98,6 +110,8 @@
             background: white;
             image-rendering: pixelated;
             cursor: crosshair;
+            max-width: 100%;
+            max-height: 100%;
         }
 
         .meta {
@@ -202,6 +216,11 @@
                 width: 100%;
                 position: static;
             }
+
+            .grid-controls {
+                flex-direction: column;
+                gap: 8px;
+            }
         }
     </style>
 </head>
@@ -211,15 +230,21 @@
         <h1>Range² Visualizer</h1>
 
         <div class="global-controls">
-            <label>
-                Grid size:
-                <input id="gridSize" type="number" min="5" max="51" step="2" value="31" />
-            </label>
+            <div class="grid-controls">
+                <label>
+                    Width:
+                    <input id="gridWidth" type="number" min="5" max="100" value="31" />
+                </label>
+                <label>
+                    Height:
+                    <input id="gridHeight" type="number" min="5" max="100" value="21" />
+                </label>
+            </div>
             <button class="clear-btn" id="clearAll">Clear All Units</button>
         </div>
 
         <div id="canvasWrap">
-            <canvas id="c" width="600" height="600"></canvas>
+            <canvas id="c"></canvas>
         </div>
 
         <div class="meta">
@@ -247,14 +272,15 @@
     <script>
         const canvas = document.getElementById('c');
         const ctx = canvas.getContext('2d');
-        const gridInput = document.getElementById('gridSize');
+        const gridWidthInput = document.getElementById('gridWidth');
+        const gridHeightInput = document.getElementById('gridHeight');
         const hoverInfo = document.getElementById('hoverInfo');
         const unitsList = document.getElementById('unitsList');
         const clearAllBtn = document.getElementById('clearAll');
 
-        let grid = parseInt(gridInput.value);
-        const sizePx = Math.min(canvas.width, canvas.height);
-        let cell = Math.floor(sizePx / grid);
+        let gridWidth, gridHeight;
+        let cellSize;
+        let canvasWidth, canvasHeight;
         let units = [];
         let selectedUnitId = null;
         let nextUnitId = 1;
@@ -278,39 +304,57 @@
             return unitColors[index % unitColors.length];
         }
 
+        // Initialize grid dimensions based on window size
+        function initializeGridSize() {
+            const maxMainPanelWidth = window.innerWidth - 380; // Account for side panel and padding
+            const maxMainPanelHeight = window.innerHeight - 200; // Account for controls and padding
+
+            // Calculate initial grid dimensions
+            const targetCellSize = 20;
+            const initialWidth = Math.max(5, Math.min(100, Math.floor(maxMainPanelWidth / targetCellSize)));
+            const initialHeight = Math.max(5, Math.min(100, Math.floor(maxMainPanelHeight / targetCellSize)));
+
+            // Ensure odd numbers for symmetry
+            gridWidthInput.value = initialWidth % 2 === 0 ? initialWidth - 1 : initialWidth;
+            gridHeightInput.value = initialHeight % 2 === 0 ? initialHeight - 1 : initialHeight;
+        }
+
+        // Calculate canvas dimensions and cell size
+        function calculateDimensions() {
+            gridWidth = parseInt(gridWidthInput.value);
+            gridHeight = parseInt(gridHeightInput.value);
+
+            // Ensure minimum sizes and odd numbers
+            if (gridWidth % 2 === 0) {
+                gridWidth = parseInt(gridWidthInput.value = gridWidth + 1);
+            }
+            if (gridHeight % 2 === 0) {
+                gridHeight = parseInt(gridHeightInput.value = gridHeight + 1);
+            }
+
+            // Calculate available space
+            const maxMainPanelWidth = window.innerWidth - 380; // Account for side panel and padding
+            const maxMainPanelHeight = window.innerHeight * 0.7; // Use 70% of viewport height
+
+            // Calculate cell size to fit the grid within available space
+            const cellSizeByWidth = Math.floor(maxMainPanelWidth / gridWidth);
+            const cellSizeByHeight = Math.floor(maxMainPanelHeight / gridHeight);
+            cellSize = Math.max(8, Math.min(cellSizeByWidth, cellSizeByHeight, 40)); // Min 8px, max 40px
+
+            canvasWidth = gridWidth * cellSize;
+            canvasHeight = gridHeight * cellSize;
+        }
+
         // Save state to localStorage
         function saveState() {
             const state = {
                 units: units,
                 selectedUnitId: selectedUnitId,
                 nextUnitId: nextUnitId,
-                grid: grid
+                gridWidth: gridWidth,
+                gridHeight: gridHeight
             };
             localStorage.setItem('rangeVisualizer', JSON.stringify(state));
-        }
-
-        // Load state from localStorage
-        function loadState() {
-            try {
-                const savedState = localStorage.getItem('rangeVisualizer');
-                if (savedState) {
-                    const state = JSON.parse(savedState);
-                    units = state.units || [];
-                    selectedUnitId = state.selectedUnitId || null;
-                    nextUnitId = state.nextUnitId || 1;
-
-                    // Restore grid size if saved
-                    if (state.grid) {
-                        gridInput.value = state.grid;
-                        grid = state.grid;
-                    }
-
-                    return true;
-                }
-            } catch (error) {
-                console.warn('Failed to load saved state:', error);
-            }
-            return false;
         }
 
         function createUnit(x, y) {
@@ -326,6 +370,34 @@
             updateUI();
             draw();
             saveState();
+        }
+
+        // Load state from localStorage
+        function loadState() {
+            try {
+                const savedState = localStorage.getItem('rangeVisualizer');
+                if (savedState) {
+                    console.log('Loaded save');
+
+                    const state = JSON.parse(savedState);
+                    units = state.units || [];
+                    selectedUnitId = state.selectedUnitId || null;
+                    nextUnitId = state.nextUnitId || 1;
+
+                    // Restore grid dimensions if saved
+                    if (state.gridWidth && state.gridHeight) {
+                        gridWidthInput.value = state.gridWidth;
+                        gridHeightInput.value = state.gridHeight;
+                    }
+
+                    return true;
+                } else {
+                    createUnit(8, 8);
+                }
+            } catch (error) {
+                console.warn('Failed to load saved state:', error);
+            }
+            return false;
         }
 
         function deleteUnit(id) {
@@ -365,8 +437,8 @@
         function traceRangeBorder(unit) {
             // Find all cells within range
             const inRangeCells = new Set();
-            for (let y = 0; y < grid; y++) {
-                for (let x = 0; x < grid; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
                     const dx = x - unit.x;
                     const dy = y - unit.y;
                     const dsq = dx * dx + dy * dy;
@@ -375,52 +447,52 @@
                     }
                 }
             }
-            
+
             const borders = [];
-            
+
             // For each cell in range, check which edges need borders
-            for (let y = 0; y < grid; y++) {
-                for (let x = 0; x < grid; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
                     if (inRangeCells.has(`${x},${y}`)) {
-                        const cellX = x * cell;
-                        const cellY = y * cell;
-                        
+                        const cellX = x * cellSize;
+                        const cellY = y * cellSize;
+
                         // Check each edge of the cell
                         // Top edge
-                        if (!inRangeCells.has(`${x},${y-1}`)) {
+                        if (!inRangeCells.has(`${x},${y - 1}`)) {
                             borders.push({
                                 x1: cellX, y1: cellY,
-                                x2: cellX + cell, y2: cellY
+                                x2: cellX + cellSize, y2: cellY
                             });
                         }
-                        
+
                         // Bottom edge
-                        if (!inRangeCells.has(`${x},${y+1}`)) {
+                        if (!inRangeCells.has(`${x},${y + 1}`)) {
                             borders.push({
-                                x1: cellX, y1: cellY + cell,
-                                x2: cellX + cell, y2: cellY + cell
+                                x1: cellX, y1: cellY + cellSize,
+                                x2: cellX + cellSize, y2: cellY + cellSize
                             });
                         }
-                        
+
                         // Left edge
-                        if (!inRangeCells.has(`${x-1},${y}`)) {
+                        if (!inRangeCells.has(`${x - 1},${y}`)) {
                             borders.push({
                                 x1: cellX, y1: cellY,
-                                x2: cellX, y2: cellY + cell
+                                x2: cellX, y2: cellY + cellSize
                             });
                         }
-                        
+
                         // Right edge
-                        if (!inRangeCells.has(`${x+1},${y}`)) {
+                        if (!inRangeCells.has(`${x + 1},${y}`)) {
                             borders.push({
-                                x1: cellX + cell, y1: cellY,
-                                x2: cellX + cell, y2: cellY + cell
+                                x1: cellX + cellSize, y1: cellY,
+                                x2: cellX + cellSize, y2: cellY + cellSize
                             });
                         }
                     }
                 }
             }
-            
+
             return borders;
         }
 
@@ -437,35 +509,29 @@
         }
 
         function performDraw() {
-            grid = parseInt(gridInput.value);
-
-            // Ensure grid is odd
-            if (grid % 2 === 0) {
-                grid = parseInt(gridInput.value = parseInt(gridInput.value) + 1);
-            }
-
-            cell = Math.floor(sizePx / grid);
+            calculateDimensions();
+            setupCanvas();
 
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // Draw grid background
-            for (let y = 0; y < grid; y++) {
-                for (let x = 0; x < grid; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
                     ctx.fillStyle = 'rgba(240, 240, 240, 0.3)';
                     ctx.fillRect(
-                        x * cell + 1,
-                        y * cell + 1,
-                        cell - 2,
-                        cell - 2
+                        x * cellSize + 1,
+                        y * cellSize + 1,
+                        cellSize - 2,
+                        cellSize - 2
                     );
                 }
             }
 
             // Draw range areas for each unit
             units.forEach(unit => {
-                for (let y = 0; y < grid; y++) {
-                    for (let x = 0; x < grid; x++) {
+                for (let y = 0; y < gridHeight; y++) {
+                    for (let x = 0; x < gridWidth; x++) {
                         const dx = x - unit.x;
                         const dy = y - unit.y;
                         const dsq = dx * dx + dy * dy;
@@ -477,11 +543,12 @@
                             const b = parseInt(unit.color.slice(5, 7), 16);
                             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
 
+                            // Fill the entire cell, covering the grid lines
                             ctx.fillRect(
-                                x * cell + 1,
-                                y * cell + 1,
-                                cell - 2,
-                                cell - 2
+                                x * cellSize,
+                                y * cellSize,
+                                cellSize,
+                                cellSize
                             );
                         }
                     }
@@ -491,7 +558,7 @@
                 const borders = traceRangeBorder(unit);
                 ctx.strokeStyle = unit.color;
                 ctx.lineWidth = 2;
-                
+
                 borders.forEach(border => {
                     ctx.beginPath();
                     ctx.moveTo(border.x1, border.y1);
@@ -509,30 +576,40 @@
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 3;
                     ctx.strokeRect(
-                        unit.x * cell - 1,
-                        unit.y * cell - 1,
-                        cell + 2,
-                        cell + 2
+                        unit.x * cellSize - 1,
+                        unit.y * cellSize - 1,
+                        cellSize + 2,
+                        cellSize + 2
                     );
                 }
 
                 ctx.fillRect(
-                    unit.x * cell + 2,
-                    unit.y * cell + 2,
-                    cell - 4,
-                    cell - 4
+                    unit.x * cellSize + 2,
+                    unit.y * cellSize + 2,
+                    cellSize - 4,
+                    cellSize - 4
                 );
 
                 // Draw unit ID
                 ctx.fillStyle = '#fff';
-                ctx.font = `${Math.max(10, cell / 3)}px Arial`;
+                ctx.font = `${Math.max(8, cellSize / 3)}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.fillText(
                     unit.id.toString(),
-                    (unit.x + 0.5) * cell,
-                    (unit.y + 0.65) * cell
+                    (unit.x + 0.5) * cellSize,
+                    (unit.y + 0.65) * cellSize
                 );
             });
+        }
+
+        function setupCanvas() {
+            // Fix DPI for crisp rendering
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = canvasWidth * dpr;
+            canvas.height = canvasHeight * dpr;
+            canvas.style.width = canvasWidth + 'px';
+            canvas.style.height = canvasHeight + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
 
         function updateUI() {
@@ -593,8 +670,8 @@
 
         function calculateInRangeCells(unit) {
             let count = 0;
-            for (let y = 0; y < grid; y++) {
-                for (let x = 0; x < grid; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
                     const dx = x - unit.x;
                     const dy = y - unit.y;
                     const dsq = dx * dx + dy * dy;
@@ -674,7 +751,13 @@
         window.addEventListener('beforeunload', saveState);
 
         // Event handlers
-        gridInput.addEventListener('change', () => {
+        gridWidthInput.addEventListener('change', () => {
+            draw();
+            updateUI();
+            saveState();
+        });
+
+        gridHeightInput.addEventListener('change', () => {
             draw();
             updateUI();
             saveState();
@@ -694,10 +777,10 @@
 
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / cell);
-            const y = Math.floor((e.clientY - rect.top) / cell);
+            const x = Math.floor((e.clientX - rect.left) / cellSize);
+            const y = Math.floor((e.clientY - rect.top) / cellSize);
 
-            if (x >= 0 && x < grid && y >= 0 && y < grid) {
+            if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
                 const existingUnit = getUnitAt(x, y);
 
                 if (existingUnit) {
@@ -714,10 +797,10 @@
 
                         if (isDragging) {
                             const moveRect = canvas.getBoundingClientRect();
-                            const newX = Math.floor((moveEvent.clientX - moveRect.left) / cell);
-                            const newY = Math.floor((moveEvent.clientY - moveRect.top) / cell);
+                            const newX = Math.floor((moveEvent.clientX - moveRect.left) / cellSize);
+                            const newY = Math.floor((moveEvent.clientY - moveRect.top) / cellSize);
 
-                            if (newX >= 0 && newX < grid && newY >= 0 && newY < grid) {
+                            if (newX >= 0 && newX < gridWidth && newY >= 0 && newY < gridHeight) {
                                 moveSelectedUnit(newX, newY);
                             }
                         }
@@ -732,11 +815,11 @@
                         isDragging = false;
                         // Update cursor based on current hover position
                         const rect = canvas.getBoundingClientRect();
-                        const currentX = Math.floor((e.clientX - rect.left) / cell);
-                        const currentY = Math.floor((e.clientY - rect.top) / cell);
+                        const currentX = Math.floor((e.clientX - rect.left) / cellSize);
+                        const currentY = Math.floor((e.clientY - rect.top) / cellSize);
                         const unitAtCursor = getUnitAt(currentX, currentY);
                         canvas.style.cursor = unitAtCursor ? 'grab' : 'crosshair';
-                        
+
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
                     };
@@ -753,12 +836,12 @@
         // Hover information and cursor management
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / cell);
-            const y = Math.floor((e.clientY - rect.top) / cell);
+            const x = Math.floor((e.clientX - rect.left) / cellSize);
+            const y = Math.floor((e.clientY - rect.top) / cellSize);
 
-            if (x >= 0 && x < grid && y >= 0 && y < grid) {
+            if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
                 const unit = getUnitAt(x, y);
-                
+
                 // Update cursor based on what's under the mouse
                 if (unit) {
                     canvas.style.cursor = 'grab';
@@ -784,26 +867,20 @@
             hoverInfo.textContent = 'Hover over cells to see coordinates and distances';
         });
 
-        // Fix DPI for crisp rendering
-        function fixDPI() {
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = sizePx * dpr;
-            canvas.height = sizePx * dpr;
-            canvas.style.width = sizePx + 'px';
-            canvas.style.height = sizePx + 'px';
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // Handle window resize
+        window.addEventListener('resize', () => {
             draw();
-        }
+        });
 
         // Initialize
         const hasLoadedState = loadState();
-        fixDPI();
-        updateUI();
-
-        // If we loaded state, make sure the display is updated
-        if (hasLoadedState) {
-            draw();
+        if (!hasLoadedState) {
+            initializeGridSize();
         }
+        calculateDimensions();
+        setupCanvas();
+        updateUI();
+        draw();
     </script>
 </body>
 
