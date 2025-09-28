@@ -97,7 +97,7 @@
             display: block;
             background: white;
             image-rendering: pixelated;
-            cursor: grab;
+            cursor: crosshair;
         }
 
         .meta {
@@ -259,6 +259,25 @@
         let selectedUnitId = null;
         let nextUnitId = 1;
 
+        const unitColors = [
+            '#e74c3c', // Red
+            '#3498db', // Blue
+            '#2ecc71', // Green
+            '#f39c12', // Orange
+            '#9b59b6', // Purple
+            '#1abc9c', // Teal
+            '#e67e22', // Dark orange
+            '#34495e', // Dark blue-gray
+            '#c0392b', // Dark red
+            '#27ae60', // Dark green
+            '#8e44ad', // Dark purple
+            '#16a085'  // Dark teal
+        ];
+
+        function getUnitColor(index) {
+            return unitColors[index % unitColors.length];
+        }
+
         // Save state to localStorage
         function saveState() {
             const state = {
@@ -294,25 +313,6 @@
             return false;
         }
 
-        const unitColors = [
-            '#e74c3c', // Red
-            '#3498db', // Blue
-            '#2ecc71', // Green
-            '#f39c12', // Orange
-            '#9b59b6', // Purple
-            '#1abc9c', // Teal
-            '#e67e22', // Dark orange
-            '#34495e', // Dark blue-gray
-            '#c0392b', // Dark red
-            '#27ae60', // Dark green
-            '#8e44ad', // Dark purple
-            '#16a085'  // Dark teal
-        ];
-
-        function getUnitColor(index) {
-            return unitColors[index % unitColors.length];
-        }
-
         function createUnit(x, y) {
             const unit = {
                 id: nextUnitId++,
@@ -341,6 +341,7 @@
         function selectUnit(id) {
             selectedUnitId = id;
             updateUI();
+            saveState();
         }
 
         function moveSelectedUnit(x, y) {
@@ -358,6 +359,69 @@
 
         function getUnitAt(x, y) {
             return units.find(unit => unit.x === x && unit.y === y);
+        }
+
+        // Function to trace the outer border of a unit's range
+        function traceRangeBorder(unit) {
+            // Find all cells within range
+            const inRangeCells = new Set();
+            for (let y = 0; y < grid; y++) {
+                for (let x = 0; x < grid; x++) {
+                    const dx = x - unit.x;
+                    const dy = y - unit.y;
+                    const dsq = dx * dx + dy * dy;
+                    if (dsq <= unit.range2) {
+                        inRangeCells.add(`${x},${y}`);
+                    }
+                }
+            }
+            
+            const borders = [];
+            
+            // For each cell in range, check which edges need borders
+            for (let y = 0; y < grid; y++) {
+                for (let x = 0; x < grid; x++) {
+                    if (inRangeCells.has(`${x},${y}`)) {
+                        const cellX = x * cell;
+                        const cellY = y * cell;
+                        
+                        // Check each edge of the cell
+                        // Top edge
+                        if (!inRangeCells.has(`${x},${y-1}`)) {
+                            borders.push({
+                                x1: cellX, y1: cellY,
+                                x2: cellX + cell, y2: cellY
+                            });
+                        }
+                        
+                        // Bottom edge
+                        if (!inRangeCells.has(`${x},${y+1}`)) {
+                            borders.push({
+                                x1: cellX, y1: cellY + cell,
+                                x2: cellX + cell, y2: cellY + cell
+                            });
+                        }
+                        
+                        // Left edge
+                        if (!inRangeCells.has(`${x-1},${y}`)) {
+                            borders.push({
+                                x1: cellX, y1: cellY,
+                                x2: cellX, y2: cellY + cell
+                            });
+                        }
+                        
+                        // Right edge
+                        if (!inRangeCells.has(`${x+1},${y}`)) {
+                            borders.push({
+                                x1: cellX + cell, y1: cellY,
+                                x2: cellX + cell, y2: cellY + cell
+                            });
+                        }
+                    }
+                }
+            }
+            
+            return borders;
         }
 
         // Optimized draw function with requestAnimationFrame throttling
@@ -423,19 +487,17 @@
                     }
                 }
 
-                // Draw range boundary circle
-                ctx.beginPath();
-                ctx.strokeStyle = unit.color + '40'; // Add transparency
-                ctx.lineWidth = 1;
-                const radius = Math.sqrt(unit.range2) * cell;
-                ctx.arc(
-                    (unit.x + 0.5) * cell,
-                    (unit.y + 0.5) * cell,
-                    radius,
-                    0,
-                    Math.PI * 2
-                );
-                ctx.stroke();
+                // Draw line border around the range
+                const borders = traceRangeBorder(unit);
+                ctx.strokeStyle = unit.color;
+                ctx.lineWidth = 2;
+                
+                borders.forEach(border => {
+                    ctx.beginPath();
+                    ctx.moveTo(border.x1, border.y1);
+                    ctx.lineTo(border.x2, border.y2);
+                    ctx.stroke();
+                });
             });
 
             // Draw units
@@ -662,13 +724,19 @@
                     };
 
                     const onMouseUp = () => {
+                        // Only select the unit if it wasn't a drag
                         if (!isDragging) {
-                            // This was a click, not a drag - create new unit at same position
-                            createUnit(x, y);
+                            selectUnit(existingUnit.id);
                         }
 
                         isDragging = false;
-                        canvas.style.cursor = 'crosshair';
+                        // Update cursor based on current hover position
+                        const rect = canvas.getBoundingClientRect();
+                        const currentX = Math.floor((e.clientX - rect.left) / cell);
+                        const currentY = Math.floor((e.clientY - rect.top) / cell);
+                        const unitAtCursor = getUnitAt(currentX, currentY);
+                        canvas.style.cursor = unitAtCursor ? 'grab' : 'crosshair';
+                        
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
                     };
@@ -682,7 +750,7 @@
             }
         });
 
-        // Hover information
+        // Hover information and cursor management
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / cell);
@@ -690,9 +758,13 @@
 
             if (x >= 0 && x < grid && y >= 0 && y < grid) {
                 const unit = getUnitAt(x, y);
+                
+                // Update cursor based on what's under the mouse
                 if (unit) {
+                    canvas.style.cursor = 'grab';
                     hoverInfo.textContent = `Unit ${unit.id} at (${x}, ${y}) | Range²: ${unit.range2}`;
                 } else {
+                    canvas.style.cursor = 'crosshair';
                     const distances = units.map(u => {
                         const dx = x - u.x;
                         const dy = y - u.y;
@@ -702,11 +774,13 @@
                     hoverInfo.textContent = `(${x}, ${y})${units.length > 0 ? ' | Distances² - ' + distances : ''}`;
                 }
             } else {
+                canvas.style.cursor = 'default';
                 hoverInfo.textContent = 'Hover over cells to see coordinates and distances';
             }
         });
 
         canvas.addEventListener('mouseleave', () => {
+            canvas.style.cursor = 'default';
             hoverInfo.textContent = 'Hover over cells to see coordinates and distances';
         });
 
