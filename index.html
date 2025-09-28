@@ -255,6 +255,41 @@
         let selectedUnitId = null;
         let nextUnitId = 1;
 
+        // Save state to localStorage
+        function saveState() {
+            const state = {
+                units: units,
+                selectedUnitId: selectedUnitId,
+                nextUnitId: nextUnitId,
+                grid: grid
+            };
+            localStorage.setItem('rangeVisualizer', JSON.stringify(state));
+        }
+
+        // Load state from localStorage
+        function loadState() {
+            try {
+                const savedState = localStorage.getItem('rangeVisualizer');
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    units = state.units || [];
+                    selectedUnitId = state.selectedUnitId || null;
+                    nextUnitId = state.nextUnitId || 1;
+                    
+                    // Restore grid size if saved
+                    if (state.grid) {
+                        gridInput.value = state.grid;
+                        grid = state.grid;
+                    }
+                    
+                    return true;
+                }
+            } catch (error) {
+                console.warn('Failed to load saved state:', error);
+            }
+            return false;
+        }
+
         const unitColors = [
             '#e74c3c', // Red
             '#3498db', // Blue
@@ -286,6 +321,7 @@
             selectedUnitId = unit.id;
             updateUI();
             draw();
+            saveState();
         }
 
         function deleteUnit(id) {
@@ -295,6 +331,7 @@
             }
             updateUI();
             draw();
+            saveState();
         }
 
         function selectUnit(id) {
@@ -310,6 +347,7 @@
                     unit.y = y;
                     updateUI();
                     draw();
+                    saveState();
                 }
             }
         }
@@ -518,6 +556,7 @@
                 } else {
                     updateUI(); // Full UI update on final change
                     draw();
+                    saveState(); // Save state on final change only
                 }
             }
         }
@@ -565,10 +604,14 @@
             slider.addEventListener('blur', handleBlur);
         }
 
+        // Save state when page is about to unload
+        window.addEventListener('beforeunload', saveState);
+
         // Event handlers
         gridInput.addEventListener('change', () => {
             draw();
             updateUI();
+            saveState();
         });
 
         clearAllBtn.addEventListener('click', () => {
@@ -577,6 +620,7 @@
             nextUnitId = 1;
             updateUI();
             draw();
+            saveState();
         });
 
         let isDragging = false;
@@ -674,8 +718,14 @@
         }
 
         // Initialize
+        const hasLoadedState = loadState();
         fixDPI();
         updateUI();
+        
+        // If we loaded state, make sure the display is updated
+        if (hasLoadedState) {
+            draw();
+        }
     </script>
 </body>
 </html>
